@@ -1,18 +1,1679 @@
 <!doctype html>
-<html lang="en" class="bg-void text-bone antialiased">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TETHER — Protocol-Level Persistence Engine for Autonomous Agents</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;700&family=Syne:wght@700;800&display=swap"
-      rel="stylesheet"
-    />
-  </head>
-  <body class="bg-void text-bone overflow-x-hidden selection:bg-lime selection:text-void">
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tether — Agent Persistence Control Plane</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            canvas: '#F7F8FA',
+            surface: '#FFFFFF',
+            subtle: '#F1F3F6',
+            border: '#E5E8EE',
+            ink: '#0F172A',
+            muted: '#64748B',
+            brand: '#059669',
+            brandSoft: '#ECFDF5',
+            brandBorder: '#A7F3D0',
+            warn: '#D97706',
+            warnSoft: '#FFFBEB',
+            warnBorder: '#FDE68A',
+          },
+          fontFamily: {
+            display: ['"Plus Jakarta Sans"', '"Inter"', 'sans-serif'],
+            sans: ['"Inter"', 'sans-serif'],
+          },
+          boxShadow: {
+            card: '0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.03)',
+            elevated: '0 8px 24px rgba(15, 23, 42, 0.08)',
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background-color: #F7F8FA;
+      color: #0F172A;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    /* Strictly exclude monospace family everywhere */
+    code, pre, kbd, samp {
+      font-family: 'Inter', sans-serif !important;
+      font-variant-numeric: tabular-nums;
+    }
+    .tabular-nums { font-variant-numeric: tabular-nums; }
+    .pulse-ring {
+      position: relative;
+    }
+    .pulse-ring::after {
+      content: '';
+      position: absolute;
+      inset: -3px;
+      border-radius: 9999px;
+      border: 2px solid currentColor;
+      opacity: 0;
+      animation: softPulse 2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+    }
+    @keyframes softPulse {
+      0% { transform: scale(0.85); opacity: 0.55; }
+      100% { transform: scale(1.9); opacity: 0; }
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #F7F8FA; }
+    ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+  </style>
+</head>
+<body class="bg-canvas text-ink min-h-screen">
+  <!-- TOAST NOTIFICATION -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- MOBILE SIDEBAR OVERLAY -->
+  <div id="mobile-overlay" class="fixed inset-0 bg-ink/25 z-40 hidden lg:hidden"></div>
+
+  <div class="flex min-h-screen">
+    <!-- =================================================================== -->
+    <!-- LEFT SIDEBAR NAVIGATION (Startup SaaS Shell)                        -->
+    <!-- =================================================================== -->
+    <aside id="sidebar" class="fixed lg:sticky top-0 left-0 z-50 h-screen w-64 bg-surface border-r border-border flex flex-col justify-between transition-transform duration-200 -translate-x-full lg:translate-x-0 shrink-0">
+      <div>
+        <!-- Brand Header -->
+        <div class="h-16 px-5 border-b border-border flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-ink text-surface flex items-center justify-center font-display font-extrabold text-sm tracking-tight">
+              T
+            </div>
+            <div>
+              <div class="font-display font-extrabold text-base tracking-tight text-ink leading-none">Tether</div>
+              <div class="text-[11px] font-medium text-muted mt-0.5">Persistence Engine</div>
+            </div>
+          </div>
+          <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-brandSoft text-brand border border-brandBorder">
+            v0.9.4
+          </span>
+        </div>
+
+        <!-- Workspace Switcher -->
+        <div class="px-4 pt-4 pb-2">
+          <div class="px-3 py-2 rounded-lg bg-canvas border border-border flex items-center justify-between">
+            <div>
+              <div class="text-xs font-semibold text-ink">Production Cluster</div>
+              <div class="text-[11px] text-muted">us-east-1a · 4 agents</div>
+            </div>
+            <span id="sidebar-health-dot" class="w-2.5 h-2.5 rounded-full bg-brand text-brand pulse-ring"></span>
+          </div>
+        </div>
+
+        <!-- Nav Items -->
+        <nav class="px-3 py-2 space-y-1" aria-label="Workspace Navigation">
+          <button type="button" data-view="overview" class="nav-btn w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold bg-brandSoft text-brand transition-colors">
+            <span class="flex items-center gap-2.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+              Overview
+            </span>
+          </button>
+
+          <button type="button" data-view="sessions" class="nav-btn w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-muted hover:bg-subtle hover:text-ink transition-colors">
+            <span class="flex items-center gap-2.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+              Live Sessions
+            </span>
+            <span class="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-subtle text-ink tabular-nums">4</span>
+          </button>
+
+          <button type="button" data-view="fence" class="nav-btn w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-muted hover:bg-subtle hover:text-ink transition-colors">
+            <span class="flex items-center gap-2.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Fence Approvals
+            </span>
+            <span id="sidebar-fence-count" class="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-warnSoft text-warn border border-warnBorder tabular-nums">4</span>
+          </button>
+
+          <button type="button" data-view="merge" class="nav-btn w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-muted hover:bg-subtle hover:text-ink transition-colors">
+            <span class="flex items-center gap-2.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+              AST Merge
+            </span>
+          </button>
+
+          <button type="button" data-view="proof" class="nav-btn w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-muted hover:bg-subtle hover:text-ink transition-colors">
+            <span class="flex items-center gap-2.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              Chaos Verification
+            </span>
+          </button>
+
+          <button type="button" data-view="settings" class="nav-btn w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-muted hover:bg-subtle hover:text-ink transition-colors">
+            <span class="flex items-center gap-2.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              Settings &amp; CLI
+            </span>
+          </button>
+        </nav>
+      </div>
+
+      <!-- Bottom Daemon Telemetry Card -->
+      <div class="p-4 border-t border-border">
+        <div class="p-3 rounded-xl bg-canvas border border-border">
+          <div class="flex items-center justify-between text-xs font-semibold text-ink">
+            <span>Local Daemon</span>
+            <span id="daemon-status-text" class="text-brand">Synced</span>
+          </div>
+          <div class="mt-2 flex items-center justify-between text-[11px] text-muted tabular-nums">
+            <span>WAL Offset</span>
+            <span id="sidebar-wal" class="font-semibold text-ink">Segment 043</span>
+          </div>
+          <div class="mt-1 flex items-center justify-between text-[11px] text-muted tabular-nums">
+            <span>Shadow Pool</span>
+            <span class="font-semibold text-ink">Warm (412 ms)</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- =================================================================== -->
+    <!-- MAIN WORKSPACE AREA                                                 -->
+    <!-- =================================================================== -->
+    <div class="flex-1 flex flex-col min-w-0">
+      <!-- TOP BAR -->
+      <header class="sticky top-0 z-30 h-16 bg-surface/95 backdrop-blur border-b border-border px-4 lg:px-8 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3 min-w-0">
+          <button type="button" id="mobile-menu-btn" class="lg:hidden p-2 rounded-lg border border-border text-ink hover:bg-subtle" aria-label="Open Menu">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+          </button>
+          <div>
+            <h1 id="page-title" class="font-display font-bold text-lg text-ink leading-tight">Overview</h1>
+            <p id="page-subtitle" class="text-xs text-muted hidden sm:block">Protocol-level persistence across local and browser agents</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2.5">
+          <!-- Global Search -->
+          <div class="hidden md:flex items-center bg-canvas border border-border rounded-lg px-3 py-1.5 w-60 focus-within:border-brand transition-colors">
+            <svg class="w-4 h-4 text-muted mr-2 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input id="global-search" type="text" placeholder="Search agents, rules, files..." class="bg-transparent text-xs text-ink placeholder-muted focus:outline-none w-full" />
+          </div>
+
+          <!-- Live Wi-Fi Link Status Pill -->
+          <div id="network-status-pill" class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-brandSoft border border-brandBorder text-brand text-xs font-semibold">
+            <span id="network-status-dot" class="w-2 h-2 rounded-full bg-brand"></span>
+            <span id="network-status-label">Laptop Online · 12 ms</span>
+          </div>
+
+          <!-- Interactive Disconnect Simulator Button -->
+          <button type="button" id="btn-simulate-wifi" class="px-3.5 py-2 rounded-lg text-xs font-semibold bg-ink text-surface hover:bg-ink/90 transition-colors shadow-card whitespace-nowrap">
+            Simulate Wi-Fi Drop
+          </button>
+        </div>
+      </header>
+
+      <!-- DYNAMIC VIEW CONTAINER -->
+      <main class="flex-1 p-4 lg:p-8 max-w-[1400px] w-full mx-auto">
+
+        <!-- =============================================================== -->
+        <!-- VIEW 1: OVERVIEW DASHBOARD                                      -->
+        <!-- =============================================================== -->
+        <section id="view-overview" class="dashboard-view space-y-6">
+          <!-- Offline Alert Banner (Reveals dynamically when Wi-Fi is dropped) -->
+          <div id="offline-banner" class="hidden rounded-xl bg-warnSoft border border-warnBorder p-4 flex flex-wrap items-center justify-between gap-4 shadow-card">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg bg-warn text-surface flex items-center justify-center shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+              </div>
+              <div>
+                <div class="text-sm font-bold text-ink">Laptop disconnected — Cloud Shadow Worker active</div>
+                <div class="text-xs text-muted">Failover completed in 412 ms with 0 duplicate tool calls. Irreversible operations are frozen at the wire fence until you reconnect.</div>
+              </div>
+            </div>
+            <button type="button" id="btn-banner-reconnect" class="px-3.5 py-2 rounded-lg text-xs font-semibold bg-brand text-surface hover:bg-brand/90 transition-colors">
+              Reconnect &amp; Run AST Merge
+            </button>
+          </div>
+
+          <!-- KPI Metric Strip -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div class="anim-card bg-surface border border-border rounded-xl p-5 shadow-card">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-medium text-muted">Active Protected Agents</span>
+                <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-brandSoft text-brand">Unmodified</span>
+              </div>
+              <div class="mt-3 flex items-baseline gap-2">
+                <span id="kpi-agents" class="font-display font-extrabold text-3xl text-ink tabular-nums">4</span>
+                <span class="text-xs font-medium text-brand">100% WAL synced</span>
+              </div>
+              <div class="mt-2 text-xs text-muted">Claude Code, Playwright CDP, Cursor, Support Bot</div>
+            </div>
+
+            <div class="anim-card bg-surface border border-border rounded-xl p-5 shadow-card">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-medium text-muted">Shadow Failover Latency</span>
+                <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-subtle text-ink">P95</span>
+              </div>
+              <div class="mt-3 flex items-baseline gap-2">
+                <span id="kpi-latency" class="font-display font-extrabold text-3xl text-ink tabular-nums">412 ms</span>
+                <span class="text-xs font-medium text-brand">0 duplicate calls</span>
+              </div>
+              <div class="mt-2 text-xs text-muted">Warm Firecracker micro-VM hydration from wire WAL</div>
+            </div>
+
+            <div class="anim-card bg-surface border border-border rounded-xl p-5 shadow-card">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-medium text-muted">Fenced Actions Held</span>
+                <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-warnSoft text-warn">Zero Leaks</span>
+              </div>
+              <div class="mt-3 flex items-baseline gap-2">
+                <span id="kpi-fenced" class="font-display font-extrabold text-3xl text-ink tabular-nums">4</span>
+                <span class="text-xs font-medium text-warn">Awaiting signature</span>
+              </div>
+              <div class="mt-2 text-xs text-muted">Refunds, payments, force-push, and destructive DDL</div>
+            </div>
+
+            <div class="anim-card bg-surface border border-border rounded-xl p-5 shadow-card">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-medium text-muted">AST Merge Resolution</span>
+                <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-brandSoft text-brand">Tree-sitter</span>
+              </div>
+              <div class="mt-3 flex items-baseline gap-2">
+                <span class="font-display font-extrabold text-3xl text-ink tabular-nums">99.4%</span>
+                <span class="text-xs font-medium text-brand">-91% vs diff3</span>
+              </div>
+              <div class="mt-2 text-xs text-muted">Clean syntax-tree merges on reconnect across 184 runs</div>
+            </div>
+          </div>
+
+                    <!-- PREMIUM 60FPS MOTION GRAPHICS EXPLAINER VIDEO PLAYER -->
+          <div class="anim-card bg-surface border border-border rounded-xl shadow-card overflow-hidden">
+            <div class="px-5 py-4 border-b border-border flex flex-wrap items-center justify-between gap-3">
+              <div class="flex items-center gap-3">
+                <span class="w-2.5 h-2.5 rounded-full bg-brand pulse-ring text-brand"></span>
+                <div>
+                  <h2 class="font-display font-bold text-base text-ink">Product Explainer — How Tether Survives Disconnects</h2>
+                  <p class="text-xs text-muted">60 fps vector motion graphics · 4-chapter walkthrough (00:24)</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button type="button" id="mg-speed-btn" class="px-2.5 py-1.5 rounded-lg border border-border text-xs font-semibold text-ink hover:bg-subtle tabular-nums">1.0x</button>
+                <button type="button" id="mg-sound-btn" class="px-2.5 py-1.5 rounded-lg border border-border text-xs font-semibold text-muted hover:text-ink hover:bg-subtle">Sound Off</button>
+                <button type="button" id="mg-play-btn" class="px-3.5 py-1.5 rounded-lg bg-ink text-surface text-xs font-semibold hover:bg-ink/90 transition-colors">Pause</button>
+              </div>
+            </div>
+
+            <div class="relative bg-canvas">
+              <canvas id="explainer-video-canvas" class="w-full block" style="aspect-ratio: 16 / 7;"></canvas>
+            </div>
+
+            <!-- Interactive Video Scrubber & Chapter Markers -->
+            <div class="px-5 py-3.5 bg-surface border-t border-border space-y-3">
+              <div class="flex items-center gap-3">
+                <span id="mg-time-cur" class="text-xs font-semibold text-ink tabular-nums w-10">00:00</span>
+                <input id="mg-scrubber" type="range" min="0" max="24000" value="0" step="50" aria-label="Explainer video timeline" class="flex-1 accent-emerald-600 cursor-pointer h-1.5 bg-subtle rounded-lg" />
+                <span class="text-xs font-medium text-muted tabular-nums w-10 text-right">00:24</span>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <button type="button" data-mg-chapter="0" class="mg-chapter-btn px-3 py-2 rounded-lg text-left border border-brandBorder bg-brandSoft text-brand font-semibold transition-colors">
+                  01 · Wire Capture
+                </button>
+                <button type="button" data-mg-chapter="6000" class="mg-chapter-btn px-3 py-2 rounded-lg text-left border border-border bg-canvas text-muted hover:text-ink font-medium transition-colors">
+                  02 · 412ms Failover
+                </button>
+                <button type="button" data-mg-chapter="12000" class="mg-chapter-btn px-3 py-2 rounded-lg text-left border border-border bg-canvas text-muted hover:text-ink font-medium transition-colors">
+                  03 · Irreversible Fence
+                </button>
+                <button type="button" data-mg-chapter="18000" class="mg-chapter-btn px-3 py-2 rounded-lg text-left border border-border bg-canvas text-muted hover:text-ink font-medium transition-colors">
+                  04 · AST Merge
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Architecture Visual Hero + Interactive 4-Stage Pipeline Infographic -->
+          <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+            <div class="anim-card xl:col-span-7 bg-surface border border-border rounded-xl shadow-card overflow-hidden flex flex-col">
+              <div class="p-5 border-b border-border flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 class="font-display font-bold text-base text-ink">Protocol Persistence Topology</h2>
+                  <p class="text-xs text-muted mt-0.5">Live state of local daemon, cloud shadow worker, and irreversible egress fence</p>
+                </div>
+                <span id="topology-mode-badge" class="text-xs font-semibold px-2.5 py-1 rounded-full bg-brandSoft text-brand border border-brandBorder">
+                  Nominal · Online Sync
+                </span>
+              </div>
+              <div class="bg-canvas p-4 flex-1 flex items-center justify-center">
+                <img
+                  src="/images/tether-architecture.jpg"
+                  alt="Tether Architecture Topology showing laptop node connected via emerald pathways to cloud shadow compute with an amber security fence"
+                  class="w-full h-auto max-h-72 object-contain rounded-lg"
+                />
+              </div>
+              <!-- 4-Step Interactive Pipeline Infographic -->
+              <div class="grid grid-cols-2 sm:grid-cols-4 border-t border-border divide-y sm:divide-y-0 sm:divide-x divide-border text-xs">
+                <div id="pipe-step-1" class="p-3.5 bg-brandSoft/60">
+                  <div class="font-semibold text-brand">01. Local Daemon</div>
+                  <div class="text-muted mt-0.5">Records wire frames &amp; syncs WAL</div>
+                </div>
+                <div id="pipe-step-2" class="p-3.5 bg-surface">
+                  <div class="font-semibold text-ink">02. Cloud Shadow</div>
+                  <div class="text-muted mt-0.5">Wakes in 412 ms on net drop</div>
+                </div>
+                <div id="pipe-step-3" class="p-3.5 bg-surface">
+                  <div class="font-semibold text-ink">03. Wire Fence</div>
+                  <div class="text-muted mt-0.5">Freezes irreversible sinks</div>
+                </div>
+                <div id="pipe-step-4" class="p-3.5 bg-surface">
+                  <div class="font-semibold text-ink">04. AST Merge</div>
+                  <div class="text-muted mt-0.5">Reconciles edits on reconnect</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Live Infographics: Chart.js Telemetry + Safety Doughnut -->
+            <div class="xl:col-span-5 flex flex-col gap-6">
+              <div class="anim-card bg-surface border border-border rounded-xl p-5 shadow-card">
+                <div class="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 class="font-display font-bold text-sm text-ink">WAL Sync &amp; Failover Latency (ms)</h3>
+                    <p class="text-xs text-muted">Last 10 telemetry intervals</p>
+                  </div>
+                  <span class="text-xs font-semibold text-brand tabular-nums">Avg 14.2 ms</span>
+                </div>
+                <div class="relative h-44">
+                  <canvas id="latency-chart"></canvas>
+                </div>
+              </div>
+
+              <div class="anim-card bg-surface border border-border rounded-xl p-5 shadow-card flex-1 flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 class="font-display font-bold text-sm text-ink">Offline Execution Safety Split</h3>
+                    <p class="text-xs text-muted">Autonomous safe steps vs. fenced sinks</p>
+                  </div>
+                  <span class="text-xs font-semibold text-ink tabular-nums">142 total ops</span>
+                </div>
+                <div class="grid grid-cols-12 gap-4 items-center">
+                  <div class="col-span-5 relative h-32">
+                    <canvas id="safety-chart"></canvas>
+                  </div>
+                  <div class="col-span-7 space-y-2.5 text-xs">
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-brandSoft/70 border border-brandBorder">
+                      <span class="font-semibold text-brand">Safe Steps Executed</span>
+                      <span class="font-bold text-ink tabular-nums">138 (97.2%)</span>
+                    </div>
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-warnSoft border border-warnBorder">
+                      <span class="font-semibold text-warn">Irreversible Fenced</span>
+                      <span class="font-bold text-ink tabular-nums">4 (2.8%)</span>
+                    </div>
+                    <div class="text-[11px] text-muted">0 unauthorized external packets leaked across all offline sessions.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Active Agent Sessions Preview Table -->
+          <div class="anim-card bg-surface border border-border rounded-xl shadow-card overflow-hidden">
+            <div class="px-5 py-4 border-b border-border flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="font-display font-bold text-base text-ink">Active Agent Sessions</h2>
+                <p class="text-xs text-muted">Unmodified local and browser agents currently wrapped by Tether</p>
+              </div>
+              <button type="button" data-view="sessions" class="text-xs font-semibold text-brand hover:underline">
+                Inspect all wire streams →
+              </button>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr class="bg-canvas border-b border-border text-muted font-semibold">
+                    <th class="py-3 px-5">Agent &amp; Task</th>
+                    <th class="py-3 px-4">Transport</th>
+                    <th class="py-3 px-4">Execution Node</th>
+                    <th class="py-3 px-4">WAL Frames</th>
+                    <th class="py-3 px-4">Fence State</th>
+                    <th class="py-3 px-5 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="overview-sessions-tbody" class="divide-y divide-border"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- =============================================================== -->
+        <!-- VIEW 2: LIVE SESSIONS & WIRE REPLAY                             -->
+        <!-- =============================================================== -->
+        <section id="view-sessions" class="dashboard-view hidden space-y-6">
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <!-- Session List -->
+            <div class="lg:col-span-4 bg-surface border border-border rounded-xl shadow-card overflow-hidden">
+              <div class="p-4 border-b border-border">
+                <h2 class="font-display font-bold text-sm text-ink">Wrapped Agent Processes</h2>
+                <p class="text-xs text-muted mt-0.5">Select a session to inspect exact-once wire replay</p>
+              </div>
+              <div id="sessions-selector-list" class="divide-y divide-border"></div>
+            </div>
+
+            <!-- Selected Session Wire Replay Stream -->
+            <div class="lg:col-span-8 bg-surface border border-border rounded-xl shadow-card flex flex-col">
+              <div class="p-5 border-b border-border flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <h2 id="detail-session-name" class="font-display font-bold text-base text-ink">Claude Code</h2>
+                    <span id="detail-session-badge" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-brandSoft text-brand">Local Online</span>
+                  </div>
+                  <p id="detail-session-task" class="text-xs text-muted mt-0.5">Migrating Stripe webhook retries and idempotency guards</p>
+                </div>
+                <button type="button" id="btn-replay-step" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand text-surface hover:bg-brand/90 transition-colors">
+                  Step Wire Replay
+                </button>
+              </div>
+
+              <div class="p-5 flex-1">
+                <div class="grid grid-cols-3 gap-3 mb-5">
+                  <div class="p-3 rounded-lg bg-canvas border border-border">
+                    <div class="text-[11px] text-muted">Memoized Cache Hits</div>
+                    <div id="detail-cache-hits" class="font-display font-bold text-lg text-ink mt-0.5 tabular-nums">43 / 43</div>
+                  </div>
+                  <div class="p-3 rounded-lg bg-canvas border border-border">
+                    <div class="text-[11px] text-muted">Duplicate Tool Calls</div>
+                    <div class="font-display font-bold text-lg text-brand mt-0.5 tabular-nums">0</div>
+                  </div>
+                  <div class="p-3 rounded-lg bg-canvas border border-border">
+                    <div class="text-[11px] text-muted">Workspace Delta</div>
+                    <div id="detail-delta" class="font-display font-bold text-lg text-ink mt-0.5 tabular-nums">18.4 KB</div>
+                  </div>
+                </div>
+
+                <h3 class="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Deterministic Wire Frame Ledger</h3>
+                <div id="detail-wire-steps" class="space-y-2.5"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- =============================================================== -->
+        <!-- VIEW 3: FENCE APPROVALS QUEUE                                   -->
+        <!-- =============================================================== -->
+        <section id="view-fence" class="dashboard-view hidden space-y-6">
+          <div class="flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-2">
+              <button type="button" data-fence-filter="all" class="fence-filter-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-ink text-surface">All Operations</button>
+              <button type="button" data-fence-filter="pending" class="fence-filter-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-surface border border-border text-muted hover:text-ink">Pending Hold</button>
+              <button type="button" data-fence-filter="resolved" class="fence-filter-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-surface border border-border text-muted hover:text-ink">Resolved</button>
+            </div>
+            <div class="text-xs text-muted">Every intercepted action is held with <strong class="text-ink">0 bytes</strong> sent until signed.</div>
+          </div>
+
+          <div id="fence-approvals-list" class="space-y-3"></div>
+        </section>
+
+        <!-- =============================================================== -->
+        <!-- VIEW 4: AST MERGE INSPECTOR                                     -->
+        <!-- =============================================================== -->
+        <section id="view-merge" class="dashboard-view hidden space-y-6">
+          <!-- Visual Editorial Banner -->
+          <div class="bg-surface border border-border rounded-xl shadow-card overflow-hidden grid grid-cols-1 lg:grid-cols-12 items-center">
+            <div class="lg:col-span-6 p-6 space-y-3">
+              <span class="inline-block text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-brandSoft text-brand border border-brandBorder">
+                Tree-sitter Structural Merge
+              </span>
+              <h2 class="font-display font-bold text-xl text-ink">Merge cloud shadow work with your offline local edits without conflict markers.</h2>
+              <p class="text-sm text-muted leading-relaxed">
+                When you edit a file on a flight while the shadow worker refactors imports and adds tests in the same file, line-based diff3 fails. Tether parses Base, Local, and Shadow AST trees and reconciles disjoint syntax nodes cleanly.
+              </p>
+              <div class="flex flex-wrap items-center gap-2 pt-2">
+                <button type="button" id="btn-merge-mode-ast" class="px-3.5 py-2 rounded-lg text-xs font-semibold bg-brand text-surface">Tether AST Merge (0 Conflicts)</button>
+                <button type="button" id="btn-merge-mode-diff3" class="px-3.5 py-2 rounded-lg text-xs font-semibold bg-surface border border-border text-muted hover:text-ink">Compare Line diff3 (Broken)</button>
+              </div>
+            </div>
+            <div class="lg:col-span-6 bg-canvas p-4 border-t lg:border-t-0 lg:border-l border-border flex items-center justify-center">
+              <img
+                src="/images/tether-ast-merge.jpg"
+                alt="Minimalist 3D infographic showing local and cloud AST code branches merging through a crystal prism with an amber safety lock"
+                class="w-full h-auto max-h-60 object-contain rounded-lg"
+              />
+            </div>
+          </div>
+
+          <!-- File Switcher + Structural Diff Workbench -->
+          <div class="bg-surface border border-border rounded-xl shadow-card overflow-hidden">
+            <div class="px-5 py-3 border-b border-border bg-canvas flex flex-wrap items-center justify-between gap-3">
+              <div id="merge-file-tabs" class="flex flex-wrap items-center gap-2"></div>
+              <span id="merge-status-pill" class="text-xs font-semibold px-2.5 py-1 rounded-full bg-brandSoft text-brand">0 Conflicts · Verified by TypeScript</span>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-border text-xs">
+              <div class="p-5">
+                <div class="font-semibold text-muted uppercase tracking-wider text-[11px] mb-3">Local Offline Edit + Cloud Shadow Edit</div>
+                <div id="merge-inputs-panel" class="space-y-3"></div>
+              </div>
+              <div class="p-5 bg-canvas/50">
+                <div id="merge-output-title" class="font-semibold text-brand uppercase tracking-wider text-[11px] mb-3">Tether AST Reconciled Output</div>
+                <div id="merge-output-panel" class="space-y-2"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- =============================================================== -->
+        <!-- VIEW 5: CHAOS VERIFICATION SUITES                               -->
+        <!-- =============================================================== -->
+        <section id="view-proof" class="dashboard-view hidden space-y-6">
+          <div class="bg-surface border border-border rounded-xl p-5 shadow-card flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 class="font-display font-bold text-base text-ink">Deterministic Chaos Test Matrix</h2>
+              <p class="text-xs text-muted mt-0.5">Six reproducible fault-injection scenarios proving exact-once replay, zero egress leaks, and clean AST merges</p>
+            </div>
+            <button type="button" id="btn-run-chaos" class="px-4 py-2 rounded-lg text-xs font-semibold bg-brand text-surface hover:bg-brand/90 transition-colors">
+              Run All 6 Chaos Suites
+            </button>
+          </div>
+
+          <div id="chaos-suites-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+        </section>
+
+        <!-- =============================================================== -->
+        <!-- VIEW 6: SETTINGS & CLI DEPLOYMENT                               -->
+        <!-- =============================================================== -->
+        <section id="view-settings" class="dashboard-view hidden space-y-6">
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div class="lg:col-span-7 bg-surface border border-border rounded-xl p-6 shadow-card space-y-5">
+              <div>
+                <h2 class="font-display font-bold text-base text-ink">Install &amp; Wrap Any Agent</h2>
+                <p class="text-xs text-muted mt-0.5">Zero SDK integration required. Wrap your existing CLI or Playwright process directly.</p>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button type="button" data-cli="sh" class="cli-tab px-3 py-1.5 rounded-lg text-xs font-semibold bg-ink text-surface">Shell</button>
+                <button type="button" data-cli="brew" class="cli-tab px-3 py-1.5 rounded-lg text-xs font-semibold bg-canvas border border-border text-muted">Homebrew</button>
+                <button type="button" data-cli="cargo" class="cli-tab px-3 py-1.5 rounded-lg text-xs font-semibold bg-canvas border border-border text-muted">Cargo</button>
+              </div>
+
+              <div class="p-4 rounded-xl bg-canvas border border-border flex items-center justify-between gap-3">
+                <span id="cli-command-text" class="text-xs font-semibold text-ink overflow-x-auto whitespace-nowrap">curl -fsSL https://tether.sh | sh &amp;&amp; tether wrap -- claude</span>
+                <button type="button" id="btn-copy-cli" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand text-surface hover:bg-brand/90 shrink-0">
+                  Copy
+                </button>
+              </div>
+
+              <div class="pt-4 border-t border-border space-y-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <div class="text-sm font-semibold text-ink">Fail-Closed Egress Fence</div>
+                    <div class="text-xs text-muted">Automatically freeze unrecognized external HTTP POST/PUT/DELETE mutations while offline</div>
+                  </div>
+                  <button type="button" id="toggle-fail-closed" class="w-11 h-6 rounded-full bg-brand relative transition-colors" aria-label="Toggle Fail-Closed Fence">
+                    <span class="block w-4 h-4 rounded-full bg-surface translate-x-6 transition-transform"></span>
+                  </button>
+                </div>
+
+                <div class="flex items-center justify-between">
+                  <div>
+                    <div class="text-sm font-semibold text-ink">Workspace Signing Key</div>
+                    <div id="api-key-display" class="text-xs text-muted mt-0.5">tth_live_9f2c8a18e44b019c7d2a</div>
+                  </div>
+                  <button type="button" id="btn-rotate-key" class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-border text-ink hover:bg-subtle">
+                    Rotate Key
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="lg:col-span-5 bg-surface border border-border rounded-xl p-6 shadow-card flex flex-col justify-between space-y-5">
+              <div>
+                <h2 class="font-display font-bold text-base text-ink">Deployment Plan</h2>
+                <p class="text-xs text-muted mt-0.5">Self-host the Apache-2.0 protocol or use managed warm shadow micro-VMs.</p>
+                <div class="mt-4 space-y-3">
+                  <div class="p-4 rounded-xl border border-border bg-canvas">
+                    <div class="flex items-center justify-between">
+                      <span class="font-display font-bold text-sm text-ink">Open-Source Core</span>
+                      <span class="text-sm font-bold text-ink">$0 / forever</span>
+                    </div>
+                    <p class="text-xs text-muted mt-1">Local daemon, self-hosted Firecracker runner, full Tree-sitter AST merge engine.</p>
+                  </div>
+                  <div class="p-4 rounded-xl border-2 border-brand bg-brandSoft/40">
+                    <div class="flex items-center justify-between">
+                      <span class="font-display font-bold text-sm text-brand">Cloud Shadow Pro</span>
+                      <span class="text-sm font-bold text-ink">$29 / seat / mo</span>
+                    </div>
+                    <p class="text-xs text-muted mt-1">412 ms warm micro-VM failover, 7-region encrypted WAL sync, signed fence audit logs.</p>
+                  </div>
+                </div>
+              </div>
+              <button type="button" id="btn-upgrade-toast" class="w-full py-2.5 rounded-lg text-xs font-semibold bg-ink text-surface hover:bg-ink/90 transition-colors">
+                Start 14-Day Cloud Shadow Trial
+              </button>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Exact-version CDN libraries: Chart.js + GSAP -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // =========================================================================
+      // STATE & DATA
+      // =========================================================================
+      let isOffline = false;
+      let currentView = 'overview';
+      let searchQuery = '';
+      let selectedSessionId = 'sess-1';
+      let fenceFilter = 'all';
+      let mergeMode = 'ast';
+      let selectedMergeFile = 0;
+      let failClosed = true;
+      let currentCli = 'sh';
+      let runningChaos = false;
+
+      const SESSIONS = [
+        {
+          id: 'sess-1', name: 'Claude Code', task: 'Migrate Stripe webhook retries & refund idempotency guard',
+          transport: 'MCP + Stdio', frames: 43, delta: '18.4 KB', cacheHits: '43 / 43', fenced: 2,
+          steps: [
+            { seq: '#041', actor: 'Local Daemon', op: 'fs.readFile — src/billing/refund.ts', status: 'Memoized', rtt: '0.8 ms' },
+            { seq: '#042', actor: 'WAL Sync', op: 'Committed 18.4 KB delta to us-east-1a', status: 'Synced', rtt: '12.1 ms' },
+            { seq: '#043', actor: 'Shadow VM', op: 'vitest run tests/refund.spec.ts (14/14 passed)', status: 'Executed', rtt: '412 ms' },
+            { seq: '#044', actor: 'Wire Fence', op: 'POST api.stripe.com/v1/refunds ($420.00)', status: 'Frozen', rtt: '1.1 ms' },
+          ],
+        },
+        {
+          id: 'sess-2', name: 'Playwright CDP Bot', task: 'Vendor quote comparison & PO #9921 checkout preparation',
+          transport: 'Chrome DevTools Protocol', frames: 115, delta: '64.2 KB', cacheHits: '112 / 112', fenced: 1,
+          steps: [
+            { seq: '#112', actor: 'Local Daemon', op: 'Snapshotted DOM + session cookies to WAL', status: 'Synced', rtt: '15.0 ms' },
+            { seq: '#113', actor: 'Shadow VM', op: 'Hydrated headless Chromium & filled PO #9921', status: 'Executed', rtt: '450 ms' },
+            { seq: '#114', actor: 'Wire Fence', op: 'Click button[data-submit-pay] ($3,840.00)', status: 'Frozen', rtt: '1.4 ms' },
+          ],
+        },
+        {
+          id: 'sess-3', name: 'Cursor Refactor Worker', task: 'Extract shared auth middleware across 12 API routes',
+          transport: 'MCP + File Watcher', frames: 28, delta: '9.6 KB', cacheHits: '28 / 28', fenced: 1,
+          steps: [
+            { seq: '#026', actor: 'Local Daemon', op: 'ast.patch — src/middleware/auth.ts', status: 'Memoized', rtt: '1.2 ms' },
+            { seq: '#027', actor: 'Shadow VM', op: 'tsc --noEmit (0 errors across 42 files)', status: 'Executed', rtt: '820 ms' },
+            { seq: '#028', actor: 'Wire Fence', op: 'git push --force origin main', status: 'Frozen', rtt: '0.8 ms' },
+          ],
+        },
+        {
+          id: 'sess-4', name: 'Billing Triage Agent', task: 'Audit failed invoice webhooks and draft customer summaries',
+          transport: 'HTTP Proxy + SQL Tap', frames: 19, delta: '4.1 KB', cacheHits: '19 / 19', fenced: 0,
+          steps: [
+            { seq: '#018', actor: 'Shadow VM', op: 'SQL SELECT on read-only billing replica', status: 'Executed', rtt: '4.4 ms' },
+            { seq: '#019', actor: 'AST Merge', op: 'Merged report output into local workspace', status: 'Synced', rtt: '3.1 ms' },
+          ],
+        },
+      ];
+
+      let FENCE_ITEMS = [
+        { id: 'env-048', agent: 'Claude Code', op: 'Stripe Refund ($420.00)', target: 'POST api.stripe.com/v1/refunds · ch_3Q9x', rule: 'POL-FIN-001', latency: '1.1 ms', status: 'pending' },
+        { id: 'env-115', agent: 'Playwright CDP Bot', op: 'Submit Purchase Order ($3,840.00)', target: 'CDP Click · button[data-submit-pay]', rule: 'POL-CDP-008', latency: '1.4 ms', status: 'pending' },
+        { id: 'env-049', agent: 'Cursor Refactor Worker', op: 'Force Push to Main', target: 'git-receive-pack · origin/main', rule: 'POL-VCS-009', latency: '0.8 ms', status: 'pending' },
+        { id: 'env-052', agent: 'Billing Triage Agent', op: 'Drop Staging Ledger Table', target: 'SQL DDL · DROP TABLE staging.invoices', rule: 'POL-DB-099', latency: '0.6 ms', status: 'pending' },
+      ];
+
+      const MERGE_FILES = [
+        {
+          name: 'src/billing/refund.ts',
+          localEdit: 'import { retry, timeout } from "@tether/net"; // Added offline on flight',
+          shadowEdit: 'import { retry, idempotencyKey } from "@tether/net"; // Added by cloud shadow worker',
+          astResult: [
+            'import { retry, timeout, idempotencyKey } from "@tether/net";',
+            'Reconciled 2 disjoint ImportSpecifier AST nodes cleanly in 3.8 ms.',
+            'TypeScript compiler check: 0 errors · Vitest suite: 14 / 14 passing.',
+          ],
+          diff3Result: [
+            '<<<<<<< LOCAL (offline edit)',
+            'import { retry, timeout } from "@tether/net";',
+            '=======',
+            'import { retry, idempotencyKey } from "@tether/net";',
+            '>>>>>>> SHADOW (cloud worker) — 3 manual conflict markers injected',
+          ],
+        },
+        {
+          name: 'src/webhooks/stripe.ts',
+          localEdit: 'Adjusted retry backoff constant from 2000ms to 1500ms locally.',
+          shadowEdit: 'Added signature verification helper and unit tests in same module.',
+          astResult: [
+            'Preserved local VariableDeclarator (RETRY_MS = 1500) + appended shadow FunctionDeclaration (verifySig).',
+            'Zero syntax collisions across 142 AST nodes in 4.1 ms.',
+          ],
+          diff3Result: [
+            'Line hunk overlap at lines 18–26 caused git diff3 merge failure.',
+            'Requires manual developer conflict resolution before tests can run.',
+          ],
+        },
+        {
+          name: 'src/checkout/guard.ts',
+          localEdit: 'Added currency rounding precision guard while offline.',
+          shadowEdit: 'Refactored parameter types to strict readonly interface.',
+          astResult: [
+            'Merged TypeAnnotation updates with local BinaryExpression precision guard cleanly.',
+            '0 conflicts · 100% deterministic tree-sitter output.',
+          ],
+          diff3Result: [
+            'Conflicting hunk inside function signature and first statement block.',
+            'Build broken until conflict markers are manually stripped.',
+          ],
+        },
+      ];
+
+      const CHAOS_SUITES = [
+        { id: 'TC-01', title: 'Mid-Tool-Call Wi-Fi Drop', metric: '0 Duplicate Calls', detail: 'Killed en0 180 ms into 14-step refactor. Shadow hydrated in 412 ms.', progress: 100, status: 'Passed' },
+        { id: 'TC-02', title: 'Offline Stripe Refund Fence', metric: '0 Bytes Leaked', detail: 'Intercepted POST /v1/refunds ($420) in 1.1 ms before TLS write.', progress: 100, status: 'Passed' },
+        { id: 'TC-03', title: 'Concurrent Local + Cloud AST Merge', metric: '0 Conflicts', detail: 'Same-file edits reconciled via Tree-sitter where git diff3 failed.', progress: 100, status: 'Passed' },
+        { id: 'TC-04', title: 'Browser Agent Checkout Freeze', metric: '1.4 ms Intercept', detail: 'Playwright CDP session hydrated in cloud and frozen before Pay.', progress: 100, status: 'Passed' },
+        { id: 'TC-05', title: 'Runaway Git Force-Push Block', metric: 'Main Protected', detail: 'git-receive-pack halted at egress fence; shadow branch preserved.', progress: 100, status: 'Passed' },
+        { id: 'TC-06', title: '47-Minute Flight Disconnect', metric: '19 / 19 Safe Ops', detail: '19 safe steps finished offline, 2 fenced, merged cleanly on landing.', progress: 100, status: 'Passed' },
+      ];
+
+      const CLI_MAP = {
+        sh: 'curl -fsSL https://tether.sh | sh && tether wrap -- claude',
+        brew: 'brew install tether-sh/tap/tether && tether wrap -- claude',
+        cargo: 'cargo install tetherd-cli && tether wrap -- claude',
+      };
+
+      const VIEW_META = {
+        overview: { title: 'Overview', sub: 'Protocol-level persistence across local and browser agents' },
+        sessions: { title: 'Live Sessions', sub: 'Exact-once wire replay and real-time WAL telemetry' },
+        fence: { title: 'Fence Approvals', sub: 'Irreversible actions frozen at the wire boundary awaiting your signature' },
+        merge: { title: 'AST Merge Inspector', sub: 'Tree-sitter code-structure reconciliation for concurrent offline edits' },
+        proof: { title: 'Chaos Verification', sub: 'Deterministic fault-injection suites proving zero leaks and zero duplicates' },
+        settings: { title: 'Settings & CLI', sub: 'Daemon installation, egress policies, and shadow compute plans' },
+      };
+
+      // =========================================================================
+      // TOAST HELPER
+      // =========================================================================
+      function showToast(msg, tone) {
+        const container = document.getElementById('toast-container');
+        const el = document.createElement('div');
+        const accent = tone === 'warn' ? 'border-warnBorder bg-warnSoft text-ink' : 'border-brandBorder bg-surface text-ink';
+        el.className = 'pointer-events-auto px-4 py-3 rounded-xl border shadow-elevated text-xs font-semibold flex items-center gap-2.5 ' + accent;
+        el.innerHTML = '<span class="w-2 h-2 rounded-full ' + (tone === 'warn' ? 'bg-warn' : 'bg-brand') + '"></span><span>' + msg + '</span>';
+        container.appendChild(el);
+        if (window.gsap) {
+          window.gsap.fromTo(el, { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.28, ease: 'power2.out' });
+        }
+        setTimeout(() => {
+          if (window.gsap) {
+            window.gsap.to(el, { opacity: 0, y: 8, duration: 0.22, onComplete: () => el.remove() });
+          } else {
+            el.remove();
+          }
+        }, 2800);
+      }
+
+      // =========================================================================
+      // CHARTS (Chart.js — Restrained Emerald & Warm Amber Palette)
+      // =========================================================================
+      let latencyChart = null;
+      let safetyChart = null;
+
+      function initCharts() {
+        if (typeof window.Chart === 'undefined') return;
+        const lCtx = document.getElementById('latency-chart').getContext('2d');
+        latencyChart = new window.Chart(lCtx, {
+          type: 'line',
+          data: {
+            labels: ['10:05', '10:07', '10:09', '10:11', '10:13', '10:15', '10:17', '10:19', '10:21', 'Now'],
+            datasets: [
+              {
+                label: 'WAL Sync (ms)',
+                data: [14, 13, 15, 12, 16, 14, 13, 15, 12, 12],
+                borderColor: '#059669',
+                backgroundColor: 'rgba(5, 150, 105, 0.08)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.35,
+                pointRadius: 2.5,
+                pointBackgroundColor: '#059669',
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: '#64748B', font: { family: 'Inter', size: 10 } } },
+              y: { beginAtZero: true, grid: { color: '#F1F3F6' }, ticks: { color: '#64748B', font: { family: 'Inter', size: 10 } } },
+            },
+          },
+        });
+
+        const sCtx = document.getElementById('safety-chart').getContext('2d');
+        safetyChart = new window.Chart(sCtx, {
+          type: 'doughnut',
+          data: {
+            labels: ['Safe Steps Executed', 'Irreversible Fenced'],
+            datasets: [{
+              data: [138, 4],
+              backgroundColor: ['#059669', '#D97706'],
+              borderWidth: 0,
+              hoverOffset: 4,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '72%',
+            plugins: { legend: { display: false } },
+          },
+        });
+      }
+
+      // =========================================================================
+      // RENDER FUNCTIONS
+      // =========================================================================
+      function updatePendingBadges() {
+        const pendingCount = FENCE_ITEMS.filter((i) => i.status === 'pending').length;
+        document.getElementById('sidebar-fence-count').textContent = String(pendingCount);
+        document.getElementById('kpi-fenced').textContent = String(pendingCount);
+      }
+
+      function renderNetworkState() {
+        const banner = document.getElementById('offline-banner');
+        const pill = document.getElementById('network-status-pill');
+        const dot = document.getElementById('network-status-dot');
+        const label = document.getElementById('network-status-label');
+        const simBtn = document.getElementById('btn-simulate-wifi');
+        const topoBadge = document.getElementById('topology-mode-badge');
+        const daemonText = document.getElementById('daemon-status-text');
+        const sideDot = document.getElementById('sidebar-health-dot');
+
+        const s1 = document.getElementById('pipe-step-1');
+        const s2 = document.getElementById('pipe-step-2');
+        const s3 = document.getElementById('pipe-step-3');
+        const s4 = document.getElementById('pipe-step-4');
+
+        if (isOffline) {
+          banner.classList.remove('hidden');
+          pill.className = 'hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-warnSoft border border-warnBorder text-warn text-xs font-semibold';
+          dot.className = 'w-2 h-2 rounded-full bg-warn';
+          label.textContent = 'Wi-Fi Dropped · Shadow VM Active';
+          simBtn.textContent = 'Reconnect & AST Merge';
+          simBtn.className = 'px-3.5 py-2 rounded-lg text-xs font-semibold bg-brand text-surface hover:bg-brand/90 transition-colors shadow-card whitespace-nowrap';
+          topoBadge.textContent = 'Failover Active · Fence Engaged';
+          topoBadge.className = 'text-xs font-semibold px-2.5 py-1 rounded-full bg-warnSoft text-warn border border-warnBorder';
+          daemonText.textContent = 'Shadow Failover';
+          daemonText.className = 'text-warn';
+          sideDot.className = 'w-2.5 h-2.5 rounded-full bg-warn text-warn pulse-ring';
+
+          s1.className = 'p-3.5 bg-surface';
+          s2.className = 'p-3.5 bg-brandSoft/70';
+          s3.className = 'p-3.5 bg-warnSoft';
+          s4.className = 'p-3.5 bg-surface';
+
+          if (latencyChart) {
+            latencyChart.data.datasets[0].data = [14, 13, 15, 12, 16, 412, 19, 18, 17, 16];
+            latencyChart.data.datasets[0].borderColor = '#D97706';
+            latencyChart.data.datasets[0].backgroundColor = 'rgba(217, 119, 6, 0.10)';
+            latencyChart.update();
+          }
+        } else {
+          banner.classList.add('hidden');
+          pill.className = 'hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-brandSoft border border-brandBorder text-brand text-xs font-semibold';
+          dot.className = 'w-2 h-2 rounded-full bg-brand';
+          label.textContent = 'Laptop Online · 12 ms';
+          simBtn.textContent = 'Simulate Wi-Fi Drop';
+          simBtn.className = 'px-3.5 py-2 rounded-lg text-xs font-semibold bg-ink text-surface hover:bg-ink/90 transition-colors shadow-card whitespace-nowrap';
+          topoBadge.textContent = 'Nominal · Online Sync';
+          topoBadge.className = 'text-xs font-semibold px-2.5 py-1 rounded-full bg-brandSoft text-brand border border-brandBorder';
+          daemonText.textContent = 'Synced';
+          daemonText.className = 'text-brand';
+          sideDot.className = 'w-2.5 h-2.5 rounded-full bg-brand text-brand pulse-ring';
+
+          s1.className = 'p-3.5 bg-brandSoft/60';
+          s2.className = 'p-3.5 bg-surface';
+          s3.className = 'p-3.5 bg-surface';
+          s4.className = 'p-3.5 bg-brandSoft/40';
+
+          if (latencyChart) {
+            latencyChart.data.datasets[0].data = [14, 13, 15, 12, 16, 14, 13, 15, 12, 12];
+            latencyChart.data.datasets[0].borderColor = '#059669';
+            latencyChart.data.datasets[0].backgroundColor = 'rgba(5, 150, 105, 0.08)';
+            latencyChart.update();
+          }
+        }
+        renderOverviewTable();
+        renderSessionsView();
+      }
+
+      function renderOverviewTable() {
+        const q = searchQuery.toLowerCase();
+        const filtered = SESSIONS.filter((s) => !q || s.name.toLowerCase().includes(q) || s.task.toLowerCase().includes(q));
+        const tbody = document.getElementById('overview-sessions-tbody');
+        tbody.innerHTML = filtered.map((s) => {
+          const node = isOffline ? 'Cloud Shadow VM' : 'Local Laptop';
+          const nodeCls = isOffline ? 'bg-warnSoft text-warn border-warnBorder' : 'bg-brandSoft text-brand border-brandBorder';
+          const fenceText = s.fenced > 0 ? s.fenced + ' Frozen' : 'Clear';
+          const fenceCls = s.fenced > 0 ? 'text-warn font-semibold' : 'text-brand font-semibold';
+          return (
+            '<tr class="hover:bg-canvas/70 transition-colors">' +
+            '<td class="py-3.5 px-5"><div class="font-semibold text-ink">' + s.name + '</div><div class="text-[11px] text-muted mt-0.5">' + s.task + '</div></td>' +
+            '<td class="py-3.5 px-4 text-muted">' + s.transport + '</td>' +
+            '<td class="py-3.5 px-4"><span class="px-2 py-0.5 rounded-full text-[11px] font-semibold border ' + nodeCls + '">' + node + '</span></td>' +
+            '<td class="py-3.5 px-4 font-semibold text-ink tabular-nums">' + s.frames + ' frames</td>' +
+            '<td class="py-3.5 px-4 ' + fenceCls + '">' + fenceText + '</td>' +
+            '<td class="py-3.5 px-5 text-right"><button type="button" data-inspect-session="' + s.id + '" class="px-2.5 py-1 rounded-lg border border-border text-ink font-semibold hover:bg-subtle">Inspect</button></td>' +
+            '</tr>'
+          );
+        }).join('');
+      }
+
+      function renderSessionsView() {
+        const list = document.getElementById('sessions-selector-list');
+        list.innerHTML = SESSIONS.map((s) => {
+          const active = s.id === selectedSessionId;
+          return (
+            '<button type="button" data-select-session="' + s.id + '" class="w-full p-4 text-left transition-colors ' + (active ? 'bg-brandSoft/60' : 'hover:bg-canvas') + '">' +
+            '<div class="flex items-center justify-between">' +
+            '<span class="font-semibold text-sm text-ink">' + s.name + '</span>' +
+            '<span class="text-[11px] font-semibold ' + (isOffline ? 'text-warn' : 'text-brand') + '">' + (isOffline ? 'Shadow VM' : 'Local') + '</span>' +
+            '</div>' +
+            '<div class="text-xs text-muted mt-1 line-clamp-1">' + s.task + '</div>' +
+            '</button>'
+          );
+        }).join('');
+
+        const cur = SESSIONS.find((s) => s.id === selectedSessionId) || SESSIONS[0];
+        document.getElementById('detail-session-name').textContent = cur.name;
+        document.getElementById('detail-session-task').textContent = cur.task;
+        const badge = document.getElementById('detail-session-badge');
+        badge.textContent = isOffline ? 'Shadow VM Active' : 'Local Online';
+        badge.className = isOffline
+          ? 'text-[11px] font-semibold px-2 py-0.5 rounded-full bg-warnSoft text-warn border border-warnBorder'
+          : 'text-[11px] font-semibold px-2 py-0.5 rounded-full bg-brandSoft text-brand border border-brandBorder';
+
+        document.getElementById('detail-cache-hits').textContent = cur.cacheHits;
+        document.getElementById('detail-delta').textContent = cur.delta;
+
+        document.getElementById('detail-wire-steps').innerHTML = cur.steps.map((st) => {
+          const isFrozen = st.status === 'Frozen';
+          const pillCls = isFrozen ? 'bg-warnSoft text-warn border-warnBorder' : 'bg-brandSoft text-brand border-brandBorder';
+          return (
+            '<div class="p-3.5 rounded-xl bg-canvas border border-border flex flex-wrap items-center justify-between gap-3 text-xs">' +
+            '<div class="flex items-center gap-3">' +
+            '<span class="font-semibold text-muted tabular-nums">' + st.seq + '</span>' +
+            '<span class="font-semibold text-ink">' + st.actor + '</span>' +
+            '<span class="text-muted">' + st.op + '</span>' +
+            '</div>' +
+            '<div class="flex items-center gap-3">' +
+            '<span class="text-muted tabular-nums">' + st.rtt + '</span>' +
+            '<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold border ' + pillCls + '">' + st.status + '</span>' +
+            '</div></div>'
+          );
+        }).join('');
+      }
+
+      function renderFenceView() {
+        const q = searchQuery.toLowerCase();
+        const items = FENCE_ITEMS.filter((item) => {
+          if (fenceFilter === 'pending' && item.status !== 'pending') return false;
+          if (fenceFilter === 'resolved' && item.status === 'pending') return false;
+          if (q && !item.op.toLowerCase().includes(q) && !item.agent.toLowerCase().includes(q)) return false;
+          return true;
+        });
+
+        const list = document.getElementById('fence-approvals-list');
+        if (items.length === 0) {
+          list.innerHTML = '<div class="bg-surface border border-border rounded-xl p-8 text-center text-sm text-muted">No operations match the current filter.</div>';
+          return;
+        }
+
+        list.innerHTML = items.map((item) => {
+          const statusBadge = item.status === 'pending'
+            ? '<span class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-warnSoft text-warn border border-warnBorder">Frozen · 0 B Sent</span>'
+            : item.status === 'approved'
+              ? '<span class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-brandSoft text-brand border border-brandBorder">Signed &amp; Released</span>'
+              : '<span class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-subtle text-muted border border-border">Rejected &amp; Dropped</span>';
+
+          const controls = item.status === 'pending'
+            ? '<div class="flex items-center gap-2">' +
+              '<button type="button" data-approve="' + item.id + '" class="px-3.5 py-2 rounded-lg text-xs font-semibold bg-brand text-surface hover:bg-brand/90">Approve &amp; Sign</button>' +
+              '<button type="button" data-reject="' + item.id + '" class="px-3 py-2 rounded-lg text-xs font-semibold border border-border text-muted hover:text-ink hover:bg-subtle">Reject</button>' +
+              '</div>'
+            : '<button type="button" data-reset-fence="' + item.id + '" class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-border text-muted hover:text-ink">Re-Freeze</button>';
+
+          return (
+            '<div class="bg-surface border border-border rounded-xl p-5 shadow-card flex flex-wrap items-center justify-between gap-4">' +
+            '<div class="space-y-1">' +
+            '<div class="flex flex-wrap items-center gap-2.5">' +
+            '<span class="font-display font-bold text-sm text-ink">' + item.op + '</span>' +
+            statusBadge +
+            '<span class="text-[11px] text-muted">' + item.rule + ' · ' + item.latency + '</span>' +
+            '</div>' +
+            '<div class="text-xs text-muted">' + item.agent + ' · ' + item.target + '</div>' +
+            '</div>' + controls + '</div>'
+          );
+        }).join('');
+        updatePendingBadges();
+      }
+
+      function renderMergeView() {
+        const tabs = document.getElementById('merge-file-tabs');
+        tabs.innerHTML = MERGE_FILES.map((f, idx) => {
+          const active = idx === selectedMergeFile;
+          return (
+            '<button type="button" data-merge-file="' + idx + '" class="px-3 py-1.5 rounded-lg text-xs font-semibold ' +
+            (active ? 'bg-ink text-surface' : 'bg-surface border border-border text-muted hover:text-ink') + '">' +
+            f.name + '</button>'
+          );
+        }).join('');
+
+        const file = MERGE_FILES[selectedMergeFile];
+        document.getElementById('merge-inputs-panel').innerHTML =
+          '<div class="p-3.5 rounded-xl bg-brandSoft/50 border border-brandBorder">' +
+          '<div class="text-[11px] font-semibold text-brand mb-1">Local Laptop Offline Edit</div>' +
+          '<div class="text-ink font-medium">' + file.localEdit + '</div></div>' +
+          '<div class="p-3.5 rounded-xl bg-canvas border border-border">' +
+          '<div class="text-[11px] font-semibold text-muted mb-1">Cloud Shadow Worker Edit</div>' +
+          '<div class="text-ink font-medium">' + file.shadowEdit + '</div></div>';
+
+        const pill = document.getElementById('merge-status-pill');
+        const outTitle = document.getElementById('merge-output-title');
+        const outPanel = document.getElementById('merge-output-panel');
+
+        if (mergeMode === 'ast') {
+          pill.textContent = '0 Conflicts · Verified by TypeScript';
+          pill.className = 'text-xs font-semibold px-2.5 py-1 rounded-full bg-brandSoft text-brand';
+          outTitle.textContent = 'Tether AST Reconciled Output';
+          outTitle.className = 'font-semibold text-brand uppercase tracking-wider text-[11px] mb-3';
+          outPanel.innerHTML = file.astResult.map((line) => (
+            '<div class="p-3 rounded-lg bg-surface border border-brandBorder text-ink font-medium">' + line + '</div>'
+          )).join('');
+        } else {
+          pill.textContent = '3 Conflict Markers · Merge Halted';
+          pill.className = 'text-xs font-semibold px-2.5 py-1 rounded-full bg-warnSoft text-warn';
+          outTitle.textContent = 'Standard git diff3 Output (Conflict)';
+          outTitle.className = 'font-semibold text-warn uppercase tracking-wider text-[11px] mb-3';
+          outPanel.innerHTML = file.diff3Result.map((line) => (
+            '<div class="p-2.5 rounded-lg bg-warnSoft/60 border border-warnBorder text-ink">' + line + '</div>'
+          )).join('');
+        }
+      }
+
+      function renderChaosView() {
+        document.getElementById('chaos-suites-grid').innerHTML = CHAOS_SUITES.map((tc) => {
+          const isPass = tc.status === 'Passed';
+          return (
+            '<div class="bg-surface border border-border rounded-xl p-5 shadow-card flex flex-col justify-between gap-4">' +
+            '<div>' +
+            '<div class="flex items-center justify-between text-xs">' +
+            '<span class="font-semibold text-muted">' + tc.id + '</span>' +
+            '<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold ' + (isPass ? 'bg-brandSoft text-brand' : 'bg-warnSoft text-warn') + '">' + tc.status + '</span>' +
+            '</div>' +
+            '<h3 class="font-display font-bold text-base text-ink mt-2">' + tc.title + '</h3>' +
+            '<div class="text-sm font-bold text-brand mt-1">' + tc.metric + '</div>' +
+            '<p class="text-xs text-muted mt-1.5 leading-relaxed">' + tc.detail + '</p>' +
+            '</div>' +
+            '<div class="w-full h-1.5 rounded-full bg-subtle overflow-hidden">' +
+            '<div class="h-full rounded-full ' + (isPass ? 'bg-brand' : 'bg-warn') + ' transition-all duration-300" style="width:' + tc.progress + '%;"></div>' +
+            '</div></div>'
+          );
+        }).join('');
+      }
+
+      // =========================================================================
+      // VIEW SWITCHER WITH PREMIUM GSAP ENTRANCE
+      // =========================================================================
+      function switchView(viewId) {
+        currentView = viewId;
+        document.querySelectorAll('.dashboard-view').forEach((v) => v.classList.add('hidden'));
+        const target = document.getElementById('view-' + viewId);
+        if (target) {
+          target.classList.remove('hidden');
+          if (window.gsap) {
+            window.gsap.fromTo(target, { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.32, ease: 'power2.out' });
+          }
+        }
+
+        const meta = VIEW_META[viewId] || VIEW_META.overview;
+        document.getElementById('page-title').textContent = meta.title;
+        document.getElementById('page-subtitle').textContent = meta.sub;
+
+        document.querySelectorAll('.nav-btn').forEach((btn) => {
+          const active = btn.getAttribute('data-view') === viewId;
+          btn.className = active
+            ? 'nav-btn w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold bg-brandSoft text-brand transition-colors'
+            : 'nav-btn w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-muted hover:bg-subtle hover:text-ink transition-colors';
+        });
+
+        // Close mobile sidebar if open
+        document.getElementById('sidebar').classList.add('-translate-x-full');
+        document.getElementById('mobile-overlay').classList.add('hidden');
+      }
+
+      // =========================================================================
+      // EVENT LISTENERS
+      // =========================================================================
+      document.querySelectorAll('[data-view]').forEach((btn) => {
+        btn.addEventListener('click', () => switchView(btn.getAttribute('data-view')));
+      });
+
+      document.getElementById('mobile-menu-btn').addEventListener('click', () => {
+        document.getElementById('sidebar').classList.remove('-translate-x-full');
+        document.getElementById('mobile-overlay').classList.remove('hidden');
+      });
+      document.getElementById('mobile-overlay').addEventListener('click', () => {
+        document.getElementById('sidebar').classList.add('-translate-x-full');
+        document.getElementById('mobile-overlay').classList.add('hidden');
+      });
+
+      function toggleWifiSimulation() {
+        isOffline = !isOffline;
+        renderNetworkState();
+        if (isOffline) {
+          showToast('Wi-Fi dropped — Cloud Shadow Worker hydrated in 412 ms', 'warn');
+        } else {
+          showToast('Reconnected — Tree-sitter AST merge completed with 0 conflicts', 'ok');
+        }
+      }
+
+      document.getElementById('btn-simulate-wifi').addEventListener('click', toggleWifiSimulation);
+      document.getElementById('btn-banner-reconnect').addEventListener('click', () => {
+        isOffline = false;
+        renderNetworkState();
+        showToast('Reconnected — Cloud deltas AST-merged cleanly', 'ok');
+      });
+
+      document.getElementById('global-search').addEventListener('input', (e) => {
+        searchQuery = e.target.value;
+        renderOverviewTable();
+        renderFenceView();
+      });
+
+      document.getElementById('overview-sessions-tbody').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-inspect-session]');
+        if (!btn) return;
+        selectedSessionId = btn.getAttribute('data-inspect-session');
+        renderSessionsView();
+        switchView('sessions');
+      });
+
+      document.getElementById('sessions-selector-list').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-select-session]');
+        if (!btn) return;
+        selectedSessionId = btn.getAttribute('data-select-session');
+        renderSessionsView();
+      });
+
+      document.getElementById('btn-replay-step').addEventListener('click', () => {
+        const cur = SESSIONS.find((s) => s.id === selectedSessionId) || SESSIONS[0];
+        cur.frames += 1;
+        cur.steps.unshift({
+          seq: '#0' + (cur.frames + 10),
+          actor: isOffline ? 'Shadow VM' : 'Local Daemon',
+          op: 'Deterministic WAL frame verified (0 duplicate calls)',
+          status: 'Synced',
+          rtt: '1.3 ms',
+        });
+        renderSessionsView();
+        renderOverviewTable();
+        showToast('Replayed next wire frame cleanly from WAL cache', 'ok');
+      });
+
+      document.querySelectorAll('.fence-filter-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          fenceFilter = btn.getAttribute('data-fence-filter');
+          document.querySelectorAll('.fence-filter-btn').forEach((b) => {
+            const active = b.getAttribute('data-fence-filter') === fenceFilter;
+            b.className = active
+              ? 'fence-filter-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-ink text-surface'
+              : 'fence-filter-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-surface border border-border text-muted hover:text-ink';
+          });
+          renderFenceView();
+        });
+      });
+
+      document.getElementById('fence-approvals-list').addEventListener('click', (e) => {
+        const app = e.target.closest('[data-approve]');
+        const rej = e.target.closest('[data-reject]');
+        const rst = e.target.closest('[data-reset-fence]');
+        if (app) {
+          const item = FENCE_ITEMS.find((i) => i.id === app.getAttribute('data-approve'));
+          if (item) { item.status = 'approved'; renderFenceView(); showToast('Signed Ed25519 ACK for ' + item.op, 'ok'); }
+        } else if (rej) {
+          const item = FENCE_ITEMS.find((i) => i.id === rej.getAttribute('data-reject'));
+          if (item) { item.status = 'rejected'; renderFenceView(); showToast('Rejected & dropped ' + item.op, 'warn'); }
+        } else if (rst) {
+          const item = FENCE_ITEMS.find((i) => i.id === rst.getAttribute('data-reset-fence'));
+          if (item) { item.status = 'pending'; renderFenceView(); showToast('Re-froze ' + item.op, 'warn'); }
+        }
+      });
+
+      document.getElementById('merge-file-tabs').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-merge-file]');
+        if (!btn) return;
+        selectedMergeFile = Number(btn.getAttribute('data-merge-file'));
+        renderMergeView();
+      });
+
+      document.getElementById('btn-merge-mode-ast').addEventListener('click', () => {
+        mergeMode = 'ast';
+        document.getElementById('btn-merge-mode-ast').className = 'px-3.5 py-2 rounded-lg text-xs font-semibold bg-brand text-surface';
+        document.getElementById('btn-merge-mode-diff3').className = 'px-3.5 py-2 rounded-lg text-xs font-semibold bg-surface border border-border text-muted hover:text-ink';
+        renderMergeView();
+      });
+      document.getElementById('btn-merge-mode-diff3').addEventListener('click', () => {
+        mergeMode = 'diff3';
+        document.getElementById('btn-merge-mode-diff3').className = 'px-3.5 py-2 rounded-lg text-xs font-semibold bg-warn text-surface';
+        document.getElementById('btn-merge-mode-ast').className = 'px-3.5 py-2 rounded-lg text-xs font-semibold bg-surface border border-border text-muted hover:text-ink';
+        renderMergeView();
+      });
+
+      document.getElementById('btn-run-chaos').addEventListener('click', () => {
+        if (runningChaos) return;
+        runningChaos = true;
+        CHAOS_SUITES.forEach((tc) => { tc.progress = 15; tc.status = 'Running'; });
+        renderChaosView();
+        CHAOS_SUITES.forEach((tc, idx) => {
+          setTimeout(() => {
+            tc.progress = 100;
+            tc.status = 'Passed';
+            renderChaosView();
+            if (idx === CHAOS_SUITES.length - 1) {
+              runningChaos = false;
+              showToast('All 6 deterministic chaos suites passed', 'ok');
+            }
+          }, (idx + 1) * 320);
+        });
+      });
+
+      document.querySelectorAll('.cli-tab').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          currentCli = btn.getAttribute('data-cli');
+          document.getElementById('cli-command-text').textContent = CLI_MAP[currentCli];
+          document.querySelectorAll('.cli-tab').forEach((b) => {
+            const active = b.getAttribute('data-cli') === currentCli;
+            b.className = active
+              ? 'cli-tab px-3 py-1.5 rounded-lg text-xs font-semibold bg-ink text-surface'
+              : 'cli-tab px-3 py-1.5 rounded-lg text-xs font-semibold bg-canvas border border-border text-muted';
+          });
+        });
+      });
+
+      document.getElementById('btn-copy-cli').addEventListener('click', () => {
+        const cmd = CLI_MAP[currentCli];
+        const done = () => showToast('CLI install command copied to clipboard', 'ok');
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(cmd).then(done).catch(() => {
+            const ta = document.createElement('textarea');
+            ta.value = cmd;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            done();
+          });
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = cmd;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          done();
+        }
+      });
+
+      document.getElementById('toggle-fail-closed').addEventListener('click', () => {
+        failClosed = !failClosed;
+        const btn = document.getElementById('toggle-fail-closed');
+        const knob = btn.querySelector('span');
+        btn.className = failClosed
+          ? 'w-11 h-6 rounded-full bg-brand relative transition-colors'
+          : 'w-11 h-6 rounded-full bg-border relative transition-colors';
+        knob.className = failClosed
+          ? 'block w-4 h-4 rounded-full bg-surface translate-x-6 transition-transform'
+          : 'block w-4 h-4 rounded-full bg-surface translate-x-1 transition-transform';
+        showToast(failClosed ? 'Fail-closed egress fence enabled' : 'Fence switched to audit-only mode', failClosed ? 'ok' : 'warn');
+      });
+
+      document.getElementById('btn-rotate-key').addEventListener('click', () => {
+        const rand = Math.random().toString(16).slice(2, 14) + Math.random().toString(16).slice(2, 10);
+        document.getElementById('api-key-display').textContent = 'tth_live_' + rand;
+        showToast('Workspace signing key rotated', 'ok');
+      });
+
+      document.getElementById('btn-upgrade-toast').addEventListener('click', () => {
+        showToast('Cloud Shadow 14-day trial workspace provisioned', 'ok');
+      });
+
+      // =========================================================================
+      // INITIALIZE & STAGGERED GSAP ENTRANCE
+      // =========================================================================
+      initCharts();
+      renderNetworkState();
+      renderFenceView();
+      renderMergeView();
+      renderChaosView();
+
+      if (window.gsap) {
+        window.gsap.fromTo(
+          '#view-overview .anim-card',
+          { y: 18, opacity: 0 },
+          { y: 0, opacity: 1, duration: 0.45, stagger: 0.06, ease: 'power2.out' }
+        );
+      }
+
+      // =========================================================================
+      // 60FPS VECTOR MOTION GRAPHICS EXPLAINER VIDEO ENGINE
+      // =========================================================================
+      const mgCanvas = document.getElementById('explainer-video-canvas');
+      const mgCtx = mgCanvas.getContext('2d');
+      const TOTAL_MS = 24000;
+      let mgTime = 0;
+      let mgPlaying = true;
+      let mgSpeed = 1.0;
+      let mgSoundOn = false;
+      let mgLastTs = performance.now();
+      let mgLastScene = -1;
+      let mgAudioCtx = null;
+      let mgRafId = null;
+
+      function playSceneCue(sceneIdx) {
+        if (!mgSoundOn) return;
+        try {
+          if (!mgAudioCtx) mgAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          const freqs = [523.25, 440.0, 392.0, 659.25];
+          const osc = mgAudioCtx.createOscillator();
+          const gain = mgAudioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = freqs[sceneIdx] || 523.25;
+          gain.gain.setValueAtTime(0.06, mgAudioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.0001, mgAudioCtx.currentTime + 0.35);
+          osc.connect(gain);
+          gain.connect(mgAudioCtx.destination);
+          osc.start();
+          osc.stop(mgAudioCtx.currentTime + 0.36);
+        } catch (err) {}
+      }
+
+      function sizeMgCanvas() {
+        const rect = mgCanvas.getBoundingClientRect();
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        mgCanvas.width = Math.max(640, Math.floor(rect.width * dpr));
+        mgCanvas.height = Math.max(280, Math.floor(rect.height * dpr));
+      }
+      sizeMgCanvas();
+      window.addEventListener('resize', sizeMgCanvas);
+
+      function easeOutCubic(t) { return 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3); }
+
+      function drawRoundedRect(ctx, x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+      }
+
+      function renderExplainerFrame(tMs) {
+        const w = mgCanvas.width;
+        const h = mgCanvas.height;
+        const s = w / 1200; // resolution-independent scale factor
+        const sceneIdx = Math.min(3, Math.floor(tMs / 6000));
+        const localT = (tMs % 6000) / 6000;
+        const enter = easeOutCubic(Math.min(1, localT * 3.5));
+
+        if (sceneIdx !== mgLastScene) {
+          mgLastScene = sceneIdx;
+          playSceneCue(sceneIdx);
+          document.querySelectorAll('.mg-chapter-btn').forEach((btn, idx) => {
+            const active = idx === sceneIdx;
+            btn.className = active
+              ? 'mg-chapter-btn px-3 py-2 rounded-lg text-left border border-brandBorder bg-brandSoft text-brand font-semibold transition-colors'
+              : 'mg-chapter-btn px-3 py-2 rounded-lg text-left border border-border bg-canvas text-muted hover:text-ink font-medium transition-colors';
+          });
+        }
+
+        // Background: crisp light alabaster with ultra-subtle architectural dot grid
+        mgCtx.fillStyle = '#F7F8FA';
+        mgCtx.fillRect(0, 0, w, h);
+        mgCtx.fillStyle = '#E2E8F0';
+        const step = 36 * s;
+        for (let gx = step; gx < w; gx += step) {
+          for (let gy = step; gy < h; gy += step) {
+            mgCtx.fillRect(gx, gy, 1.5 * s, 1.5 * s);
+          }
+        }
+
+        // Top-left chapter badge & kinetic headline
+        const titles = [
+          { tag: 'CHAPTER 01 · ZERO-SDK CAPTURE', head: 'Local daemon records every wire frame.', sub: 'Unmodified agents run normally while Tether streams WAL deltas to the cloud.', accent: '#059669' },
+          { tag: 'CHAPTER 02 · 412ms CLOUD FAILOVER', head: 'Wi-Fi dies. Shadow worker wakes instantly.', sub: 'Prior tool calls replay from WAL cache with 0 duplicate executions.', accent: '#D97706' },
+          { tag: 'CHAPTER 03 · PROTOCOL EGRESS FENCE', head: 'Safe steps finish. Irreversible freezes.', sub: 'Refunds, payments, and force-pushes halt at the wire barrier with 0 bytes leaked.', accent: '#D97706' },
+          { tag: 'CHAPTER 04 · TREE-SITTER AST MERGE', head: 'Reconnect. Local + cloud merge cleanly.', sub: 'Syntax-tree reconciliation merges offline edits with zero conflict markers.', accent: '#059669' },
+        ];
+        const info = titles[sceneIdx];
+
+        mgCtx.save();
+        mgCtx.globalAlpha = enter;
+        const slideY = (1 - enter) * 16 * s;
+
+        // Pill badge
+        mgCtx.font = '600 ' + Math.round(13 * s) + 'px Inter, sans-serif';
+        const tagW = mgCtx.measureText(info.tag).width + 24 * s;
+        drawRoundedRect(mgCtx, 48 * s, 36 * s + slideY, tagW, 28 * s, 14 * s);
+        mgCtx.fillStyle = info.accent === '#059669' ? '#ECFDF5' : '#FFFBEB';
+        mgCtx.fill();
+        mgCtx.strokeStyle = info.accent === '#059669' ? '#A7F3D0' : '#FDE68A';
+        mgCtx.lineWidth = 1.5 * s;
+        mgCtx.stroke();
+        mgCtx.fillStyle = info.accent;
+        mgCtx.fillText(info.tag, 60 * s, 55 * s + slideY);
+
+        // Headline
+        mgCtx.font = '800 ' + Math.round(34 * s) + 'px "Plus Jakarta Sans", Inter, sans-serif';
+        mgCtx.fillStyle = '#0F172A';
+        mgCtx.fillText(info.head, 48 * s, 102 * s + slideY);
+
+        // Subline
+        mgCtx.font = '500 ' + Math.round(16 * s) + 'px Inter, sans-serif';
+        mgCtx.fillStyle = '#64748B';
+        mgCtx.fillText(info.sub, 48 * s, 130 * s + slideY);
+        mgCtx.restore();
+
+        // Central Animated Architecture Diagram
+        const cy = h * 0.66;
+        const leftX = w * 0.18;
+        const midX = w * 0.50;
+        const rightX = w * 0.82;
+
+        // Connecting pathways
+        mgCtx.lineWidth = 3 * s;
+        // Left -> Mid pathway
+        mgCtx.beginPath();
+        mgCtx.moveTo(leftX + 86 * s, cy);
+        mgCtx.lineTo(midX - 86 * s, cy);
+        if (sceneIdx === 1 || sceneIdx === 2) {
+          mgCtx.setLineDash([8 * s, 8 * s]);
+          mgCtx.strokeStyle = '#D97706';
+        } else {
+          mgCtx.setLineDash([]);
+          mgCtx.strokeStyle = '#059669';
+        }
+        mgCtx.stroke();
+        mgCtx.setLineDash([]);
+
+        // Mid -> Right pathway
+        mgCtx.beginPath();
+        mgCtx.moveTo(midX + 86 * s, cy);
+        mgCtx.lineTo(rightX - 86 * s, cy);
+        mgCtx.strokeStyle = sceneIdx === 2 ? '#D97706' : '#059669';
+        mgCtx.stroke();
+
+        // Moving data packets
+        for (let i = 0; i < 3; i++) {
+          const prog = (localT * 2.2 + i * 0.33) % 1;
+          if (sceneIdx === 0) {
+            const px = (leftX + 90 * s) + prog * ((midX - 90 * s) - (leftX + 90 * s));
+            mgCtx.fillStyle = '#059669';
+            mgCtx.beginPath();
+            mgCtx.arc(px, cy, 6 * s, 0, Math.PI * 2);
+            mgCtx.fill();
+          } else if (sceneIdx === 1) {
+            // Pulse ring around Cloud Shadow VM
+            const r = (45 + prog * 45) * s;
+            mgCtx.strokeStyle = 'rgba(5, 150, 105, ' + (1 - prog) * 0.5 + ')';
+            mgCtx.lineWidth = 2.5 * s;
+            mgCtx.beginPath();
+            mgCtx.arc(midX, cy, r, 0, Math.PI * 2);
+            mgCtx.stroke();
+          } else if (sceneIdx === 2) {
+            // Packets stop abruptly at amber fence shield
+            const stopX = midX + ((rightX - midX) * 0.52);
+            const px = (midX + 86 * s) + Math.min(0.88, prog) * (stopX - (midX + 86 * s));
+            mgCtx.fillStyle = '#D97706';
+            mgCtx.beginPath();
+            mgCtx.arc(px, cy, 6.5 * s, 0, Math.PI * 2);
+            mgCtx.fill();
+          } else if (sceneIdx === 3) {
+            // Streaming back right -> left for AST merge
+            const px = (rightX - 90 * s) - prog * ((rightX - 90 * s) - (leftX + 90 * s));
+            mgCtx.fillStyle = '#059669';
+            mgCtx.beginPath();
+            mgCtx.arc(px, cy, 6 * s, 0, Math.PI * 2);
+            mgCtx.fill();
+          }
+        }
+
+        // Helper to draw clean SaaS architecture node cards
+        function drawNode(cx, title, subtitle, accentColor, active) {
+          const nw = 172 * s;
+          const nh = 96 * s;
+          mgCtx.save();
+          drawRoundedRect(mgCtx, cx - nw / 2, cy - nh / 2, nw, nh, 14 * s);
+          mgCtx.fillStyle = '#FFFFFF';
+          mgCtx.shadowColor = 'rgba(15, 23, 42, 0.07)';
+          mgCtx.shadowBlur = 18 * s;
+          mgCtx.shadowOffsetY = 6 * s;
+          mgCtx.fill();
+          mgCtx.shadowColor = 'transparent';
+          mgCtx.lineWidth = active ? 2.5 * s : 1.5 * s;
+          mgCtx.strokeStyle = active ? accentColor : '#E5E8EE';
+          mgCtx.stroke();
+
+          // Status dot
+          mgCtx.fillStyle = accentColor;
+          mgCtx.beginPath();
+          mgCtx.arc(cx - nw / 2 + 20 * s, cy - nh / 2 + 24 * s, 5 * s, 0, Math.PI * 2);
+          mgCtx.fill();
+
+          mgCtx.font = '700 ' + Math.round(15 * s) + 'px "Plus Jakarta Sans", Inter, sans-serif';
+          mgCtx.fillStyle = '#0F172A';
+          mgCtx.fillText(title, cx - nw / 2 + 34 * s, cy - nh / 2 + 29 * s);
+
+          mgCtx.font = '500 ' + Math.round(12 * s) + 'px Inter, sans-serif';
+          mgCtx.fillStyle = '#64748B';
+          mgCtx.fillText(subtitle, cx - nw / 2 + 20 * s, cy + 16 * s);
+          mgCtx.restore();
+        }
+
+        drawNode(
+          leftX,
+          'Local Daemon',
+          sceneIdx === 1 || sceneIdx === 2 ? 'Wi-Fi Offline' : 'WAL Synced · 12 ms',
+          sceneIdx === 1 || sceneIdx === 2 ? '#D97706' : '#059669',
+          sceneIdx === 0 || sceneIdx === 3
+        );
+        drawNode(
+          midX,
+          'Shadow VM',
+          sceneIdx === 1 ? 'Hydrated in 412 ms' : sceneIdx === 2 ? 'Safe Ops Done' : 'Warm Standby',
+          '#059669',
+          sceneIdx === 1 || sceneIdx === 2
+        );
+        drawNode(
+          rightX,
+          sceneIdx === 3 ? 'AST Merge' : 'Wire Fence',
+          sceneIdx === 2 ? '2 Ops Frozen (0 B)' : sceneIdx === 3 ? '0 Conflicts · Live' : 'Armed · Fail-Closed',
+          sceneIdx === 2 ? '#D97706' : '#059669',
+          sceneIdx === 2 || sceneIdx === 3
+        );
+
+        // Scene 2 Amber Shield Wall Graphic
+        if (sceneIdx === 2) {
+          const sx = midX + (rightX - midX) * 0.54;
+          drawRoundedRect(mgCtx, sx - 6 * s, cy - 64 * s, 12 * s, 128 * s, 6 * s);
+          mgCtx.fillStyle = '#D97706';
+          mgCtx.fill();
+          mgCtx.font = '700 ' + Math.round(11 * s) + 'px Inter, sans-serif';
+          mgCtx.fillStyle = '#D97706';
+          mgCtx.fillText('FENCE LOCKED', sx - 42 * s, cy - 74 * s);
+        }
+
+        // Update timecode & scrubber
+        const secs = Math.floor(tMs / 1000);
+        document.getElementById('mg-time-cur').textContent = '00:' + String(secs).padStart(2, '0');
+        document.getElementById('mg-scrubber').value = String(Math.floor(tMs));
+      }
+
+      function mgLoop(now) {
+        const dt = now - mgLastTs;
+        mgLastTs = now;
+        if (mgPlaying) {
+          mgTime = (mgTime + dt * mgSpeed) % TOTAL_MS;
+        }
+        renderExplainerFrame(mgTime);
+        mgRafId = window.requestAnimationFrame(mgLoop);
+      }
+      if (mgRafId) window.cancelAnimationFrame(mgRafId);
+      mgRafId = window.requestAnimationFrame(mgLoop);
+
+      document.getElementById('mg-play-btn').addEventListener('click', () => {
+        mgPlaying = !mgPlaying;
+        document.getElementById('mg-play-btn').textContent = mgPlaying ? 'Pause' : 'Play';
+      });
+
+      document.getElementById('mg-speed-btn').addEventListener('click', () => {
+        mgSpeed = mgSpeed === 1.0 ? 1.5 : mgSpeed === 1.5 ? 2.0 : 1.0;
+        document.getElementById('mg-speed-btn').textContent = mgSpeed.toFixed(1) + 'x';
+      });
+
+      document.getElementById('mg-sound-btn').addEventListener('click', () => {
+        mgSoundOn = !mgSoundOn;
+        const btn = document.getElementById('mg-sound-btn');
+        btn.textContent = mgSoundOn ? 'Sound On' : 'Sound Off';
+        btn.className = mgSoundOn
+          ? 'px-2.5 py-1.5 rounded-lg border border-brandBorder bg-brandSoft text-xs font-semibold text-brand'
+          : 'px-2.5 py-1.5 rounded-lg border border-border text-xs font-semibold text-muted hover:text-ink hover:bg-subtle';
+        if (mgSoundOn) playSceneCue(mgLastScene < 0 ? 0 : mgLastScene);
+      });
+
+      document.getElementById('mg-scrubber').addEventListener('input', (e) => {
+        mgTime = Number(e.target.value);
+        renderExplainerFrame(mgTime);
+      });
+
+      document.querySelectorAll('.mg-chapter-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          mgTime = Number(btn.getAttribute('data-mg-chapter'));
+          renderExplainerFrame(mgTime);
+        });
+      });
+    })();
+  </script>
+</body>
 </html>
